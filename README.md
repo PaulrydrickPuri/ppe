@@ -16,6 +16,7 @@ This project processes CCTV video recordings from industrial/construction sites 
 |---|---|---|
 | 2026-04-09 | [person-detection-dedup-pipeline](sessions/2026-04-09_person-detection-dedup-pipeline.md) | Built full person detection + pHash dedup pipeline; processed 4 videos (2× Advanced, 2× Basic PPE); extracted 3,556 unique person crops total |
 | 2026-04-09 | [full-body-filter-3way-sort](sessions/2026-04-09_full-body-filter-3way-sort.md) | YOLOv8-pose filter sorts all crops into kept/partial/remove; 1,925 full-body images ready for PPE labelling |
+| 2026-04-15 | [ppe-dataset-prep-augmentation-training-config](sessions/2026-04-15_ppe-dataset-prep-augmentation-training-config.md) | Full dataset prep: EDA, class trim to 7, coverall_advance augmentation (2,363 images), train/test/val redistribution, VisionSamurai 100-epoch training config |
 
 ---
 
@@ -23,15 +24,16 @@ This project processes CCTV video recordings from industrial/construction sites 
 
 | Item | Detail |
 |---|---|
-| Type | Person Detection / Crop Extraction |
+| Type | Object Detection (COCO format) |
 | Source videos | 4 MP4 files across 2 datasets (Advanced-PPE, Basic-PPE) |
 | Total crops extracted | 1,956 (Advanced) + 1,600 (Basic) = **3,556 unique person crops** |
 | Full-body crops (kept) | 968 (Advanced) + 957 (Basic) = **1,925 head-to-toe crops** |
-| Partial crops | 950 (Advanced) + 496 (Basic) = 1,446 |
-| No-person crops | 38 (Advanced) + 147 (Basic) = 185 |
+| Labelled dataset | snapshot(15-04-2026) — 4,275 images (train 3,895 / test 191 / val 189) |
+| Active classes | 7 — `coverall`, `coverall_advance`, `helmet`, `missing_headgear`, `missing_gloves`, `gloves`, `boots` |
+| Augmented images | 2,363 synthetic `coverall_advance` crops (spatial-only, no colour change) |
+| Format | COCO JSON — `{split}/images/` + `{split}/annotations/annotations.json` |
 | Sampling rate | 1 FPS |
 | Deduplication | pHash hamming distance threshold = 10 |
-| Format | PNG crops + CSV detection log per dataset |
 
 ---
 
@@ -39,12 +41,12 @@ This project processes CCTV video recordings from industrial/construction sites 
 
 | Item | Detail |
 |---|---|
-| Architecture | YOLOv8n (nano) |
-| Task | Person Detection (COCO class 0) |
-| Confidence threshold | 0.40 |
-| Status | Inference complete — 1,925 full-body crops ready for PPE labelling |
-| Weights | `yolov8n.pt` (6.25 MB, ultralytics) |
-| Pose filter | `yolov8n-pose.pt` (6.52 MB) — ankle keypoint visibility @ conf ≥ 0.20 |
+| Architecture | YOLOv8m (medium) |
+| Task | Object Detection — 7-class PPE compliance |
+| Status | Dataset ready — training not yet started |
+| Platform | VisionSamurai (app.visionsamur.ai) |
+| Person detector | `yolov8n.pt` — upstream crop extraction |
+| Pose filter | `yolov8n-pose.pt` — ankle keypoint visibility @ conf ≥ 0.20 |
 
 ---
 
@@ -108,12 +110,27 @@ pytest test_detect_persons.py -v
 
 ---
 
+## Class Map
+
+| Class | Train | Test | Val | Notes |
+|---|---|---|---|---|
+| `boots` | 2,375 | 278 | 284 | Safety boots worn |
+| `coverall_advance` | 2,375 | 3 | 2 | Full blue coverall — colour-critical |
+| `coverall` | 1,529 | 185 | 187 | Coverall worn (non-blue or missing headgear) |
+| `missing_headgear` | 928 | 110 | 115 | Person not wearing headgear |
+| `missing_gloves` | 742 | 109 | 91 | Person not wearing gloves |
+| `helmet` | 284 | 45 | 33 | Safety helmet worn |
+| `gloves` | 138 | 22 | 24 | Safety gloves worn — lowest class |
+
+---
+
 ## Next Steps
-- [ ] Visual QA on `kept/` samples — spot-check pose model isn't misclassifying tight crops
-- [ ] Run PPE attribute detection (helmet, vest, gloves) on the 1,925 full-body crops
-- [ ] Investigate the 147 no-person crops in Basic PPE — may reveal upstream detection issues
-- [ ] Consider `yolov8m.pt` for improved recall on distant/small persons
-- [ ] Build labelling pipeline for PPE training data
+- [ ] Upload snapshot dataset to VisionSamurai and verify 7-class list
+- [ ] Run training — 100 epochs, yolov8m, WarmupCosineLR, RepeatFactorTrainingSampler
+- [ ] Monitor val mAP for `gloves` (138 train) — may need further augmentation
+- [ ] Source `missing_boots` labelled data — absence detection not yet possible
+- [ ] Consider `vest` / `missing_vest` labelling in a future round
+- [ ] After training, review `coverall_advance` vs `coverall` confusion — colour is the key signal
 
 ---
 
